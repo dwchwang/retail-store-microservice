@@ -1,0 +1,51 @@
+- name: Create RKE2 config dir
+  ansible.builtin.file:
+    path: /etc/rancher/rke2
+    state: directory
+    mode: "0755"
+
+- name: Write RKE2 server config
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: /etc/rancher/rke2/config.yaml
+    mode: "0600"
+  notify: Restart rke2-server
+
+- name: Install RKE2 server
+  ansible.builtin.shell: |
+    set -o pipefail
+    curl -sfL https://get.rke2.io | INSTALL_RKE2_CHANNEL={{ rke2_channel }} sh -
+  args:
+    executable: /bin/bash
+    creates: /usr/local/bin/rke2
+
+- name: Start rke2-server
+  ansible.builtin.systemd:
+    name: rke2-server
+    enabled: true
+    state: started
+
+- name: Wait for supervisor port 9345
+  ansible.builtin.wait_for:
+    port: 9345
+    timeout: 300
+
+- name: Symlink kubectl
+  ansible.builtin.file:
+    src: /var/lib/rancher/rke2/bin/kubectl
+    dest: /usr/local/bin/kubectl
+    state: link
+
+- name: Read kubeconfig
+  ansible.builtin.slurp:
+    src: /etc/rancher/rke2/rke2.yaml
+  register: rke2_kubeconfig
+
+# Ghi file local một lần với IP public đã thay sẵn → chạy lại không còn "changed"
+- name: Write local kubeconfig (public IP)
+  delegate_to: localhost
+  become: false
+  ansible.builtin.copy:
+    content: "{{ rke2_kubeconfig.content | b64decode | replace('https://127.0.0.1:6443', 'https://' + ansible_host + ':6443') }}"
+    dest: "{{ kubeconfig_local_path }}"
+    mode: "0600"

@@ -1,8 +1,8 @@
-Dockerfile
-.dockerignore
-docker-compose.yml
-.gitignore
-chart
-scripts
-target
-.idea
+Dockerfile*
+.dockerignore*
+docker-compose*.yml
+*.md
+scripts/
+target/
+.idea/
+.vscode/

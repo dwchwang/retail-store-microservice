@@ -1,72 +1,23 @@
-# Build Stage
-FROM public.ecr.aws/amazonlinux/amazonlinux:2023 as build-env
+# syntax=docker/dockerfile:1
 
-# We tell DNF not to install Recommends and Suggests packages, keeping our
-# installed set of packages as minimal as possible.
-RUN dnf --setopt=install_weak_deps=False install -q -y \
-    maven \
-    java-21-amazon-corretto-headless \
-    which \
-    tar \
-    gzip \
-    && \
-    dnf clean all
-
-ARG JAR_PATH
-
-VOLUME /tmp
-WORKDIR /
-
+FROM maven:3.9-eclipse-temurin-21 AS build
+WORKDIR /build
 COPY .mvn .mvn
-COPY mvnw .
-COPY pom.xml .
+COPY mvnw pom.xml ./
+RUN --mount=type=cache,target=/root/.m2 \
+    ./mvnw -B -q dependency:go-offline
+COPY src ./src
+RUN --mount=type=cache,target=/root/.m2 \
+    ./mvnw -B -q -DskipTests package \
+ && cp target/*.jar /build/app.jar
 
-RUN ./mvnw dependency:go-offline -B -q
-
-COPY ./src ./src
-
-RUN ./mvnw -DskipTests package -q && \
-    mv /target/carts-0.0.1-SNAPSHOT.jar /app.jar
-
-# Package Stage
-FROM public.ecr.aws/amazonlinux/amazonlinux:2023
-
-# Apply all available security updates before installing packages. Amazon Linux
-# 2023 locks DNF to the release snapshot the base image was built from, so
-# --releasever=latest is required to pick up newer patched packages.
-# https://docs.aws.amazon.com/linux/al2023/ug/deterministic-upgrades-usage.html
-#
-# We tell DNF not to install Recommends and Suggests packages, which are
-# weak dependencies in DNF terminology, thus keeping our installed set of
-# packages as minimal as possible.
-RUN dnf --releasever=latest upgrade -q -y \
-    && \
-    dnf --setopt=install_weak_deps=False install -q -y \
-    java-21-amazon-corretto-headless \
-    shadow-utils \
-    && \
-    dnf clean all
-
-ENV APPUSER=appuser
-ENV APPUID=1000
-ENV APPGID=1000
-
-RUN useradd \
-    --home "/app" \
-    --create-home \
-    --user-group \
-    --uid "$APPUID" \
-    "$APPUSER"
-
-ENV JAVA_TOOL_OPTIONS=
-ENV SPRING_PROFILES_ACTIVE=prod
-
+FROM eclipse-temurin:21-jre-alpine
+RUN addgroup -S -g 1000 app && adduser -S -u 1000 -G app -h /app app
 WORKDIR /app
-USER appuser
-
-COPY ./ATTRIBUTION.md ./LICENSES.md
-COPY --chown=appuser:appuser --from=build-env /app.jar .
-
+COPY --from=build --chown=app:app /build/app.jar ./app.jar
+ENV SPRING_PROFILES_ACTIVE=prod \
+    JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75.0" \
+    PORT=8080
+USER app
 EXPOSE 8080
-
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/app.jar"]
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

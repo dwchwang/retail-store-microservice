@@ -1,5 +1,13 @@
-Dockerfile
-.dockerignore
-docker-compose.yml
-.gitignore
-scripts
+# Chỉ gửi vào build context những gì cần để compile
+Dockerfile*
+.dockerignore*
+docker-compose*.yml
+*.md
+openapi.yml
+project.json
+scripts/
+test/
+.vscode/
+.git/
+main
+__debug_bin*

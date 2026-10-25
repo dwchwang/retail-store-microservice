@@ -34,61 +34,62 @@ retail-store-gitops/           # repo riêng cho ArgoCD (GĐ4)
 
 ---
 
-## GĐ 1 – Docker *(hiện tại)*
+## GĐ 1 – Docker ✅
 
 ### 1.1 Dockerfile multi-stage (thứ tự từ dễ đến khó)
-- [ ] **catalog** (Go): build stage `golang` → runtime `distroless`/`alpine`, binary tĩnh (`CGO_ENABLED=0`)
-- [ ] **checkout** (Node): stage cài deps + build TS → runtime chỉ có `dist/` + prod deps
-- [ ] **cart / orders / ui** (Java): build bằng Maven → runtime JRE 21 (không phải JDK). Tận dụng layer cache cho `pom.xml`
-- [ ] Mọi image: chạy **non-root**, có `.dockerignore`, pin version base image, có `HEALTHCHECK` hoặc để compose kiểm tra
-- [ ] So sánh kích thước image trước và sau multi-stage (`docker images`)
+- [x] **catalog** (Go): build stage `golang` → runtime `distroless`/`alpine`, binary tĩnh (`CGO_ENABLED=0`)
+- [x] **checkout** (Node): stage cài deps + build TS → runtime chỉ có `dist/` + prod deps
+- [x] **cart / orders / ui** (Java): build bằng Maven → runtime JRE 21 (không phải JDK). Tận dụng layer cache cho `pom.xml`
+- [x] Mọi image: chạy **non-root**, có `.dockerignore`, pin version base image, có `HEALTHCHECK` hoặc để compose kiểm tra
+- [x] So sánh kích thước image trước và sau multi-stage (`docker images`)
 
 ### 1.2 docker-compose
-- [ ] 5 data store: MariaDB, DynamoDB Local, Postgres, RabbitMQ, Redis. Có volume cho những store cần giữ dữ liệu
-- [ ] 5 app service, biến môi trường lấy theo ARCHITECTURE.md §4
-- [ ] Secret đưa vào qua file `.env` (có `.env.example` commit kèm)
-- [ ] `healthcheck` + `depends_on: condition: service_healthy`
-- [ ] Network: tách `frontend` (nginx, ui) và `backend` (còn lại); chỉ nginx publish port
-- [ ] `mem_limit`, `restart: unless-stopped`, `read_only` + `tmpfs` ở service nào làm được
+- [x] 5 data store: MariaDB, DynamoDB Local, Postgres, RabbitMQ, Redis. Có volume cho những store cần giữ dữ liệu
+- [x] 5 app service, biến môi trường lấy theo ARCHITECTURE.md §4
+- [x] Secret đưa vào qua file `.env` (có `.env.example` commit kèm)
+- [x] `healthcheck` + `depends_on: condition: service_healthy`
+- [x] Network: tách `frontend` (nginx, ui) và `backend` (còn lại); chỉ nginx publish port
+- [x] `mem_limit`, `restart: unless-stopped`, `read_only` + `tmpfs` ở service nào làm được
 
 ### 1.3 Nginx reverse proxy
-- [ ] Nginx → `ui:8080`, set header `X-Forwarded-*`
-- [ ] (Tùy chọn) TLS self-signed, gzip, giới hạn body size
+- [x] Nginx → `ui:8080`, set header `X-Forwarded-*`
+- [x] (Tùy chọn) TLS self-signed, gzip, giới hạn body size
 
 **DoD:**
-- [ ] `docker compose up -d` từ máy sạch là chạy được, `docker compose ps` toàn bộ `healthy`
-- [ ] Smoke test ARCHITECTURE.md §8 pass: đơn hàng có trong Postgres
-- [ ] `docker compose down && up` → dữ liệu Postgres vẫn còn (volume)
-- [ ] Giải thích được: vì sao multi-stage, vì sao non-root, DNS nội bộ của compose hoạt động thế nào
+- [x] `docker compose up -d` từ máy sạch là chạy được, `docker compose ps` toàn bộ `healthy`
+- [x] Smoke test ARCHITECTURE.md §8 pass: đơn hàng có trong Postgres
+- [x] `docker compose down && up` → dữ liệu Postgres vẫn còn (volume)
+- [x] Giải thích được: vì sao multi-stage, vì sao non-root, DNS nội bộ của compose hoạt động thế nào
 
 ---
 
-## GĐ 2 – Hạ tầng (Terraform + Ansible)
+## GĐ 2 – Hạ tầng (Terraform + Ansible) ✅
 
 💰 *Bắt đầu tốn tiền. Đặt Budget alert trước khi `apply`.*
 
 ### 2.1 Terraform
-- [ ] Backend S3 cho state (+ bật versioning; lock bằng `use_lockfile` hoặc DynamoDB)
-- [ ] VPC, 1 public subnet (đơn giản) hoặc public + private (giống công ty hơn, nhưng NAT Gateway khoảng $32/tháng nên cân nhắc)
-- [ ] Security Group: SSH chỉ từ IP của bạn; 80/443 public; port RKE2 (6443, 9345, 10250, 8472/udp VXLAN…) chỉ mở trong SG nội bộ
-- [ ] 3 EC2 (1 server t3.large + 2 agent t3.medium), EBS gp3, 1 EIP cho node có ingress
-- [ ] Output IP để sinh inventory Ansible
-- [ ] Tách module (`network`, `compute`) và dùng `variables.tf` / `terraform.tfvars`
+- [x] Backend S3 cho state (+ bật versioning; lock bằng `use_lockfile` hoặc DynamoDB)
+- [x] VPC, 1 public subnet (đơn giản) hoặc public + private (giống công ty hơn, nhưng NAT Gateway khoảng $32/tháng nên cân nhắc)
+- [x] Security Group: SSH chỉ từ IP của bạn; 80/443 public; port RKE2 (6443, 9345, 10250, 8472/udp VXLAN…) chỉ mở trong SG nội bộ
+- [x] 3 EC2 (1 server t3.large + 2 agent t3.medium), EBS gp3, 1 EIP cho node có ingress
+- [x] Output IP để sinh inventory Ansible
+- [ ] Tách module (`network`, `compute`) *(hiện tách theo file; refactor module sau)* · [x] `variables.tf` / `terraform.tfvars`
 
 ### 2.2 Ansible
-- [ ] Role `common`: update, user deploy, SSH hardening (tắt password/root login), `ufw`/`fail2ban`, timezone, tắt swap
-- [ ] Role `rke2-server`, `rke2-agent`: cài RKE2, join token để trong Ansible Vault
-- [ ] Lấy `kubeconfig` về máy local
-- [ ] Cài Longhorn (yêu cầu `open-iscsi`, `nfs-common` trên node), đặt làm default StorageClass
+- [x] Role `common`: update, SSH hardening (tắt password/root login), `fail2ban`, tắt `ufw` (dùng SG), tắt swap *(chưa làm: user deploy riêng, timezone)*
+- [x] Role `rke2-server`, `rke2-agent`: cài RKE2, join token để trong Ansible Vault
+- [x] Lấy `kubeconfig` về máy local
+- [x] Cài Longhorn (yêu cầu `open-iscsi`, `nfs-common` trên node), đặt làm default StorageClass
 
 **DoD:**
-- [ ] `terraform apply` + `ansible-playbook site.yml` → `kubectl get nodes` có 3 node `Ready`
-- [ ] Destroy rồi dựng lại từ đầu được, không sửa tay
-- [ ] Giải thích được vai trò server/agent của RKE2 và vì sao cần SG nội bộ
+- [x] `terraform apply` + `ansible-playbook site.yml` → `kubectl get nodes` có 3 node `Ready`
+- [ ] Destroy rồi dựng lại từ đầu được, không sửa tay *(kiểm chứng ở lần dựng đầu của GĐ3)*
+- [x] Giải thích được vai trò server/agent của RKE2 và vì sao cần SG nội bộ
+- [x] Playbook chạy lần 2: `changed=0` (đã kiểm chứng)
 
 ---
 
-## GĐ 3 – Kubernetes
+## GĐ 3 – Kubernetes *(hiện tại)*
 
 ### 3.1 Manifest thuần (viết tay trước khi dùng Helm)
 - [ ] Namespace `retail-store`

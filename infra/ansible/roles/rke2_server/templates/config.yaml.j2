@@ -1,0 +1,9 @@
+token: {{ rke2_token }}
+node-name: {{ inventory_hostname }}
+node-ip: {{ private_ip }}
+node-external-ip: {{ ansible_host }}
+advertise-address: {{ private_ip }}
+tls-san:
+  - {{ ansible_host }}
+  - {{ private_ip }}
+write-kubeconfig-mode: "0600"

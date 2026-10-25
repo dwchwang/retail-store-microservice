@@ -1,0 +1,230 @@
+name: retail-store
+
+x-app: &app
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  networks:
+    - backend
+
+x-java-health: &java-health
+  test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+  interval: 10s
+  timeout: 5s
+  retries: 5
+  start_period: 60s
+
+services:
+  # ---------- Data stores ----------
+  catalog-db:
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: catalogdb
+      MARIADB_USER: catalog_user
+      MARIADB_PASSWORD: ${CATALOG_DB_PASSWORD:?}
+      MARIADB_ROOT_PASSWORD: ${CATALOG_DB_ROOT_PASSWORD:?}
+    volumes:
+      - catalog-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    mem_limit: 512m
+    networks: [backend]
+
+  cart-db:
+    image: amazon/dynamodb-local:2.6.0
+    restart: unless-stopped
+    user: root
+    working_dir: /home/dynamodblocal
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/data"]
+    volumes:
+      - cart-db-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:8000 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    mem_limit: 512m
+    networks: [backend]
+
+  orders-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: orders
+      POSTGRES_USER: orders_user
+      POSTGRES_PASSWORD: ${ORDERS_DB_PASSWORD:?}
+    volumes:
+      - orders-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orders_user -d orders"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 512m
+    networks: [backend]
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: orders
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    mem_limit: 512m
+    networks: [backend]
+
+  checkout-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 128m
+    networks: [backend]
+
+  # ---------- Apps ----------
+  catalog:
+    <<: *app
+    build: ../src/catalog
+    image: retail-store/catalog:local
+    environment:
+      RETAIL_CATALOG_PERSISTENCE_PROVIDER: mysql
+      RETAIL_CATALOG_PERSISTENCE_ENDPOINT: catalog-db:3306
+      RETAIL_CATALOG_PERSISTENCE_DB_NAME: catalogdb
+      RETAIL_CATALOG_PERSISTENCE_USER: catalog_user
+      RETAIL_CATALOG_PERSISTENCE_PASSWORD: ${CATALOG_DB_PASSWORD:?}
+    depends_on:
+      catalog-db:
+        condition: service_healthy
+    mem_limit: 128m
+
+  cart:
+    <<: *app
+    build: ../src/cart
+    image: retail-store/cart:local
+    environment:
+      RETAIL_CART_PERSISTENCE_PROVIDER: dynamodb
+      RETAIL_CART_PERSISTENCE_DYNAMODB_ENDPOINT: http://cart-db:8000
+      RETAIL_CART_PERSISTENCE_DYNAMODB_CREATE_TABLE: "true"
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      AWS_REGION: us-east-1
+    depends_on:
+      cart-db:
+        condition: service_healthy
+    healthcheck: *java-health
+    mem_limit: 512m
+
+  orders:
+    <<: *app
+    build: ../src/orders
+    image: retail-store/orders:local
+    environment:
+      RETAIL_ORDERS_PERSISTENCE_PROVIDER: postgres
+      RETAIL_ORDERS_PERSISTENCE_ENDPOINT: orders-db:5432
+      RETAIL_ORDERS_PERSISTENCE_NAME: orders
+      RETAIL_ORDERS_PERSISTENCE_USERNAME: orders_user
+      RETAIL_ORDERS_PERSISTENCE_PASSWORD: ${ORDERS_DB_PASSWORD:?}
+      RETAIL_ORDERS_MESSAGING_PROVIDER: rabbitmq
+      RETAIL_ORDERS_MESSAGING_RABBITMQ_ADDRESSES: rabbitmq:5672
+      RETAIL_ORDERS_MESSAGING_RABBITMQ_USERNAME: orders
+      RETAIL_ORDERS_MESSAGING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?}
+    depends_on:
+      orders-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck: *java-health
+    mem_limit: 512m
+
+  checkout:
+    <<: *app
+    build: ../src/checkout
+    image: retail-store/checkout:local
+    environment:
+      RETAIL_CHECKOUT_PERSISTENCE_PROVIDER: redis
+      RETAIL_CHECKOUT_PERSISTENCE_REDIS_URL: redis://checkout-redis:6379
+      RETAIL_CHECKOUT_ENDPOINTS_ORDERS: http://orders:8080
+    depends_on:
+      checkout-redis:
+        condition: service_healthy
+      orders:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 256m
+
+  ui:
+    <<: *app
+    build: ../src/ui
+    image: retail-store/ui:local
+    environment:
+      RETAIL_UI_ENDPOINTS_CATALOG: http://catalog:8080
+      RETAIL_UI_ENDPOINTS_CARTS: http://cart:8080
+      RETAIL_UI_ENDPOINTS_ORDERS: http://orders:8080
+      RETAIL_UI_ENDPOINTS_CHECKOUT: http://checkout:8080
+    depends_on:
+      catalog:
+        condition: service_started
+      cart:
+        condition: service_healthy
+      checkout:
+        condition: service_healthy
+    healthcheck: *java-health
+    mem_limit: 512m
+    networks: [frontend, backend]
+
+  # ---------- Edge ----------
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    depends_on:
+      ui:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/nginx-health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    mem_limit: 64m
+    networks: [frontend]
+
+networks:
+  frontend:
+  backend:
+    internal: true
+
+volumes:
+  catalog-db-data:
+  cart-db-data:
+  orders-db-data:
+  rabbitmq-data:

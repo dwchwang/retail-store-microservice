@@ -1,0 +1,6 @@
+rke2_channel: stable # hoặc pin: rke2_version: v1.xx.y+rke2r1
+rke2_token: "{{ vault_rke2_token }}"
+rke2_server_private_ip: "{{ hostvars[groups['server'][0]]['private_ip'] }}"
+rke2_server_public_ip: "{{ hostvars[groups['server'][0]]['ansible_host'] }}"
+longhorn_version: v1.9.1 # kiểm tra bản mới nhất: github.com/longhorn/longhorn/releases
+kubeconfig_local_path: "~/.kube/retail-store.yaml"

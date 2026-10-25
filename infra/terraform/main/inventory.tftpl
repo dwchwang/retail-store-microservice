@@ -1,0 +1,11 @@
+[server]
+${server.name} ansible_host=${server.public_ip} private_ip=${server.private_ip}
+
+[agent]
+%{ for a in agents ~}
+${a.name} ansible_host=${a.public_ip} private_ip=${a.private_ip}
+%{ endfor ~}
+
+[cluster:children]
+server
+agent

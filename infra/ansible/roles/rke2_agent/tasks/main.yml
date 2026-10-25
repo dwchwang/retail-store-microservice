@@ -1,0 +1,26 @@
+- name: Create RKE2 config dir
+  ansible.builtin.file:
+    path: /etc/rancher/rke2
+    state: directory
+    mode: "0755"
+
+- name: Write RKE2 agent config
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: /etc/rancher/rke2/config.yaml
+    mode: "0600"
+  notify: Restart rke2-agent
+
+- name: Install RKE2 agent
+  ansible.builtin.shell: |
+    set -o pipefail
+    curl -sfL https://get.rke2.io | INSTALL_RKE2_CHANNEL={{ rke2_channel }} INSTALL_RKE2_TYPE=agent sh -
+  args:
+    executable: /bin/bash
+    creates: /usr/local/bin/rke2
+
+- name: Start rke2-agent
+  ansible.builtin.systemd:
+    name: rke2-agent
+    enabled: true
+    state: started

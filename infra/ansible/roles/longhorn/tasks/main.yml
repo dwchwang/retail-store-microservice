@@ -1,0 +1,26 @@
+- name: Wait for all nodes Ready
+  ansible.builtin.command: >
+    kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml
+    wait --for=condition=Ready nodes --all --timeout=600s
+  changed_when: false
+
+- name: Get installed Longhorn version
+  ansible.builtin.command: >
+    kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml -n longhorn-system
+    get daemonset longhorn-manager -o jsonpath={.spec.template.spec.containers[0].image}
+  register: longhorn_current
+  changed_when: false
+  failed_when: false
+
+# Chỉ apply khi chưa cài hoặc đổi longhorn_version → idempotent
+- name: Install Longhorn
+  ansible.builtin.command: >
+    kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f
+    https://raw.githubusercontent.com/longhorn/longhorn/{{ longhorn_version }}/deploy/longhorn.yaml
+  when: longhorn_version not in longhorn_current.stdout
+
+- name: Wait for Longhorn manager
+  ansible.builtin.command: >
+    kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml -n longhorn-system
+    rollout status daemonset/longhorn-manager --timeout=600s
+  changed_when: false

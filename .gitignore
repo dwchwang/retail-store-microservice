@@ -1,0 +1,50 @@
+# ===== Secrets – KHÔNG BAO GIỜ commit =====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+id_rsa*
+kubeconfig*
+*.kubeconfig
+.vault_pass*
+vault-password*
+
+# ===== Terraform (GĐ2) =====
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+# chứa IP cá nhân → commit bản .example thay thế
+terraform.tfvars
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+# .terraform.lock.hcl NÊN commit để cố định version provider
+
+# ===== Ansible (GĐ2) =====
+*.retry
+infra/ansible/inventory/hosts.ini
+
+# ===== Helm (GĐ3) =====
+charts/*/charts/*.tgz
+
+# ===== Build output của các service =====
+target/
+node_modules/
+dist/
+coverage/
+src/catalog/main
+__debug_bin*
+
+# ===== IDE / OS =====
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

@@ -1,73 +1,35 @@
-# Build Stage
-FROM public.ecr.aws/amazonlinux/amazonlinux:2023 AS build-env
+# syntax=docker/dockerfile:1
 
-# Apply all available security updates before installing packages. Amazon Linux
-# 2023 locks DNF to the release snapshot the base image was built from, so
-# --releasever=latest is required to pick up newer patched packages. In this
-# stage it also ensures the Go toolchain (and the stdlib compiled into the
-# binary) is the latest patched version.
-# https://docs.aws.amazon.com/linux/al2023/ug/deterministic-upgrades-usage.html
-#
-# We tell DNF not to install Recommends and Suggests packages, which are
-# weak dependencies in DNF terminology, thus keeping our installed set of
-# packages as minimal as possible.
-RUN dnf --releasever=latest upgrade -q -y \
-    && \
-    dnf --setopt=install_weak_deps=False install -q -y \
-    git \
-    golang \
-    && \
-    dnf clean all
+ARG GO_VERSION=1.25
 
-RUN mkdir -p "${GOPATH}/src" "${GOPATH}/bin" /appsrc
+# ---------- Stage 1: build ----------
+FROM golang:${GO_VERSION}-alpine AS build
+WORKDIR /src
 
-WORKDIR /appsrc
-
-ENV GOPROXY=https://proxy.golang.org,direct
-
+# Copy file khai báo dependency trước để tận dụng layer cache
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
 COPY . .
 
-RUN go build -o main main.go
+# TARGETOS/TARGETARCH do BuildKit tự điền theo --platform
+ARG TARGETOS
+ARG TARGETARCH
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags="-s -w" -o /out/catalog .
 
-# Final stage
-FROM public.ecr.aws/amazonlinux/amazonlinux:2023
-
-ENV APPUSER=appuser
-ENV APPUID=1000
-ENV APPGID=1000
-
-# Apply all available security updates before installing packages. Amazon Linux
-# 2023 locks DNF to the release snapshot the base image was built from, so
-# --releasever=latest is required to pick up newer patched packages.
-# https://docs.aws.amazon.com/linux/al2023/ug/deterministic-upgrades-usage.html
-#
-# We tell DNF not to install Recommends and Suggests packages, which are
-# weak dependencies in DNF terminology, thus keeping our installed set of
-# packages as minimal as possible.
-RUN dnf --releasever=latest upgrade -q -y \
-    && \
-    dnf --setopt=install_weak_deps=False install -q -y \
-    shadow-utils \
-    && \
-    dnf clean all
-
-RUN useradd \
-    --home "/app" \
-    --create-home \
-    --user-group \
-    --uid "$APPUID" \
-    "$APPUSER"
-
+# ---------- Stage 2: runtime ----------
+FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
-USER appuser
 
-COPY --chown=appuser:appuser --from=build-env /appsrc/main /app/
+COPY --from=build /out/catalog /app/catalog
 
-COPY ./ATTRIBUTION.md ./LICENSES.md
+ENV GIN_MODE=release \
+    PORT=8080
+EXPOSE 8080
 
-ENV GIN_MODE=release
-
-ENTRYPOINT ["/app/main"]
+USER nonroot:nonroot
+ENTRYPOINT ["/app/catalog"]

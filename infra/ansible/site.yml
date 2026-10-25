@@ -1,0 +1,19 @@
+- name: Prepare all nodes
+  hosts: cluster
+  become: true
+  roles: [common]
+
+- name: RKE2 server
+  hosts: server
+  become: true
+  roles: [rke2_server]
+
+- name: RKE2 agents
+  hosts: agent
+  become: true
+  roles: [rke2_agent]
+
+- name: Storage
+  hosts: server
+  become: true
+  roles: [longhorn]
