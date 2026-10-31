@@ -31,6 +31,9 @@ override.tf.json
 *.retry
 infra/ansible/inventory/hosts.ini
 
+# ===== Kubernetes (GĐ3) =====
+k8s/secrets/*.env
+
 # ===== Helm (GĐ3) =====
 charts/*/charts/*.tgz
 

@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cart-db
+spec:
+  clusterIP: None
+  selector:
+    app: cart-db
+  ports:
+    - name: http
+      port: 8000
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: cart-db
+spec:
+  serviceName: cart-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cart-db
+  template:
+    metadata:
+      labels:
+        app: cart-db
+    spec:
+      securityContext:
+        runAsUser: 0          # image ghi vào volume cần quyền root (giống compose)
+      containers:
+        - name: dynamodb
+          image: amazon/dynamodb-local:2.6.0
+          workingDir: /home/dynamodblocal
+          args: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/data"]
+          ports:
+            - name: http
+              containerPort: 8000
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+

@@ -83,7 +83,7 @@ retail-store-gitops/           # repo riêng cho ArgoCD (GĐ4)
 
 **DoD:**
 - [x] `terraform apply` + `ansible-playbook site.yml` → `kubectl get nodes` có 3 node `Ready`
-- [ ] Destroy rồi dựng lại từ đầu được, không sửa tay *(kiểm chứng ở lần dựng đầu của GĐ3)*
+- [x] Destroy rồi dựng lại từ đầu được, không sửa tay *(kiểm chứng 31/10 ở lần dựng đầu của GĐ3)*
 - [x] Giải thích được vai trò server/agent của RKE2 và vì sao cần SG nội bộ
 - [x] Playbook chạy lần 2: `changed=0` (đã kiểm chứng)
 
@@ -91,15 +91,17 @@ retail-store-gitops/           # repo riêng cho ArgoCD (GĐ4)
 
 ## GĐ 3 – Kubernetes *(hiện tại)*
 
-### 3.1 Manifest thuần (viết tay trước khi dùng Helm)
-- [ ] Namespace `retail-store`
-- [ ] StatefulSet + headless Service + PVC (Longhorn) cho: MariaDB, Postgres, RabbitMQ, Redis, DynamoDB Local
-- [ ] Deployment + Service cho 5 app
-- [ ] ConfigMap (endpoint), Secret (password). Không commit Secret dạng plain text
-- [ ] Probe: `startupProbe` (Java khởi động chậm), `readinessProbe`, `livenessProbe` dùng path ở ARCHITECTURE.md §2
-- [ ] `resources.requests/limits` theo ARCHITECTURE.md §6
-- [ ] `securityContext`: `runAsNonRoot`, `readOnlyRootFilesystem`, drop ALL capabilities
-- [ ] Ingress Controller (RKE2 có sẵn ingress-nginx) → Ingress cho UI
+### 3.1 Manifest thuần (viết tay trước khi dùng Helm) – guide: `docs/guides/gd3-01-k8s-manifests.md`
+- [x] Build image amd64, push lên GHCR (tag version, không `latest`)
+- [x] Kustomize: `secretGenerator` từ `.env` không commit, `images:` đổi tag một chỗ
+- [x] Namespace `retail-store`
+- [x] StatefulSet + headless Service + PVC (Longhorn) cho: MariaDB, Postgres, RabbitMQ, DynamoDB Local *(Redis dùng Deployment + emptyDir vì không cần lưu)*
+- [x] Deployment + Service cho 5 app
+- [x] ConfigMap (endpoint), Secret (password). Không commit Secret dạng plain text
+- [x] Probe: `startupProbe` (Java khởi động chậm), `readinessProbe`, `livenessProbe` dùng path ở ARCHITECTURE.md §2
+- [x] `resources.requests/limits` theo ARCHITECTURE.md §6
+- [x] `securityContext`: `runAsNonRoot`, `readOnlyRootFilesystem`, drop ALL capabilities
+- [x] Ingress cho UI qua **Traefik** (RKE2 v1.36 cài sẵn, DaemonSet hostPort 80/443)
 
 ### 3.2 Helm
 - [ ] Đóng gói thành chart `charts/retail-store` (dùng subchart hoặc template chung cho 5 app)
@@ -112,8 +114,8 @@ retail-store-gitops/           # repo riêng cho ArgoCD (GĐ4)
 - [ ] CronJob backup Postgres + MariaDB (`pg_dump`/`mysqldump`) lên S3
 
 **DoD:**
-- [ ] Smoke test pass qua Ingress
-- [ ] `kubectl delete pod orders-db-0` → pod lên lại, đơn hàng cũ vẫn còn
+- [x] Smoke test pass qua Ingress
+- [x] `kubectl delete pod orders-db-0` → pod lên lại, đơn hàng cũ vẫn còn
 - [ ] Xóa DB, restore từ backup S3 thành công
 - [ ] Giải thích được: StatefulSet và Deployment khác nhau thế nào, readiness và liveness khác nhau thế nào, PVC được bind ra sao
 

@@ -3,7 +3,7 @@
 ARG GO_VERSION=1.25
 
 # ---------- Stage 1: build ----------
-FROM golang:${GO_VERSION}-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS build
 WORKDIR /src
 
 # Copy file khai báo dependency trước để tận dụng layer cache

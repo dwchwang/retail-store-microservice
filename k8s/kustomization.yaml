@@ -1,0 +1,49 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: retail-store
+
+resources:
+  - namespace.yaml
+  - data/catalog-db.yaml
+  - data/orders-db.yaml
+  - data/rabbitmq.yaml
+  - data/cart-db.yaml
+  - data/checkout-redis.yaml
+  - apps/catalog.yaml
+  - apps/cart.yaml
+  - apps/orders.yaml
+  - apps/checkout.yaml
+  - apps/ui.yaml
+  - ingress.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: retail-store
+
+# Secret sinh từ file .env (không commit). Tên Secret được gắn thêm hash nội dung,
+# nên đổi password → hash đổi → pod tự rollout.
+secretGenerator:
+  - name: catalog-db
+    envs: [secrets/catalog-db.env]
+  - name: orders-db
+    envs: [secrets/orders-db.env]
+  - name: rabbitmq
+    envs: [secrets/rabbitmq.env]
+
+# Manifest dùng tên image "giả"; Kustomize thay bằng image thật + tag ở đây
+images:
+  - name: retail-store/catalog
+    newName: ghcr.io/dwchwang/retail-store-catalog
+    newTag: "0.1.0"
+  - name: retail-store/cart
+    newName: ghcr.io/dwchwang/retail-store-cart
+    newTag: "0.1.0"
+  - name: retail-store/orders
+    newName: ghcr.io/dwchwang/retail-store-orders
+    newTag: "0.1.0"
+  - name: retail-store/checkout
+    newName: ghcr.io/dwchwang/retail-store-checkout
+    newTag: "0.1.0"
+  - name: retail-store/ui
+    newName: ghcr.io/dwchwang/retail-store-ui
+    newTag: "0.1.0"
